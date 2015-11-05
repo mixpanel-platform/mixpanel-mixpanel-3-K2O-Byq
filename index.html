@@ -15,7 +15,7 @@
     interval:90,
     length:10,
     };
-    MP.api.funnel(['Viewed pricing page', 'First payment'], params).done(function(results) {
+    MP.api.funnel('Viewed pricing page','Viewed pricing page', 'First payment', params).done(function(results) {
     console.log(results);
 });
       // Run queries and display results here
