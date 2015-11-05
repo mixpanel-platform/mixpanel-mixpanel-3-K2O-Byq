@@ -15,9 +15,9 @@
     interval:90,
     length:10,
     };
-    MP.api.funnel('View pricing page', 'First payment', params).done(function(results) {
-    console.log(results);
-});
+    var pricing_to_payment = MP.api.funnel('View pricing page', 'First payment', params)
+    
+    $.when(pricing_to_payment).done(console.log(pricing_to_payment))
       // Run queries and display results here
     </script>
   </body>
