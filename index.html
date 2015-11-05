@@ -18,24 +18,23 @@
     var pricing_to_payment = MP.api.funnel('View pricing page', 'First payment', params)
     
   $.when(pricing_to_payment).done(
-           function(pricing_to_payment) { 
-              
-               var conversions = {}
+             function(pricing_to_payment) { 
+                
+                 var conversions = {}
 
-               console.log(pricing_to_payment[1])
-               for (date in pricing_to_payment[1]){
-                  conversions[date] = pricing_to_payment[1][date]["step_conv_ratio"]
-               }
-               data["pricing page to payment"] = conversions
-               $(document).ready(function() {
-                   var lineChart = $('<div></div>').appendTo('body').MPChart({chartType: 'line', highchartsOptions: {
-                       tooltip: {
-                           backgroundColor: '#fffce7'  // Make tooltip background yellow
-                       }
-                   }});                                // Create a line chart
-                   lineChart.MPChart('setData', data); // Set the chart's data
-               });
-               console.log(conversions)
+                 console.log(pricing_to_payment[1])
+                 for (date in pricing_to_payment[1]){
+                    conversions[date] = pricing_to_payment[1][date]["step_conv_ratio"]
+                 }
+                 var data = {}
+                 data["pricing page to payment"] = conversions
+                 var lineChart = $('<div></div>').appendTo('body').MPChart({chartType: 'line', highchartsOptions: {
+                     tooltip: {
+                         backgroundColor: '#fffce7'  // Make tooltip background yellow
+                     }
+                 }});                                // Create a line chart
+                 lineChart.MPChart('setData', data); // Set the chart's data
+                 console.log(conversions)
                // $chart.MPChart('addSeries', homepage.filter(myFilter));
                // $chart.MPChart('addSeries', signups.filter(myFilter));
                
