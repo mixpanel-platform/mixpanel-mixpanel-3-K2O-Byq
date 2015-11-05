@@ -17,7 +17,7 @@
     };
     var pricing_to_payment = MP.api.funnel('View pricing page', 'First payment', params)
     
-    $.when(pricing_to_payment).done(console.log(pricing_to_payment))
+    $.when(pricing_to_payment).done(console.log(pricing_to_payment.filter(myFilter)))
       // Run queries and display results here
     </script>
   </body>
