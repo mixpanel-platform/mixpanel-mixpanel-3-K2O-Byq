@@ -22,11 +22,13 @@
              // $chart.MPChart({
              //       chartType: 'line'
              //   });
-               
-               var myFilter = function(val) {
-                 return val > 0;
-               };
+               var conversions = {}
+
                console.log(pricing_to_payment[1])
+               for (date in pricing_to_payment[1]){
+                  conversions[date] = pricing_to_payment[1][date]["step_conv_ratio"]
+               }
+               console.log(conversions)
                // $chart.MPChart('addSeries', homepage.filter(myFilter));
                // $chart.MPChart('addSeries', signups.filter(myFilter));
                
