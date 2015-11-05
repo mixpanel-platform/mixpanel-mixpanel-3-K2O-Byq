@@ -1,15 +1,104 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
   <head>
-    <meta charset="utf-8">
     <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/css/reset.css">
     <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.css">
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
   </head>
   <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
+    <div class="mixpanel-platform-section">
+      Quarterly unique users over the past three years (Chrome only, excluding 'flurry' and 'China')
+      <br/>
+      $signups exclude all of that and invited users
+    </div>
     <script>
-      // Run queries and display results here
+      MP.api.ready(function() {
+        // assumes you have an event called 'Button clicked'
+        var $chart = $('<div></div>').appendTo('body');
+        var homepage = MP.api.segment('homepage new', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90,
+            where: 'not "flurry" in string(properties["origin"]) and (string(properties["$browser"]) == "Chrome") and (string(properties["mp_country_code"]) != "CN")'
+        });
+        
+        var signups = MP.api.segment('$signup', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90,
+            where: 'not "flurry" in string(properties["origin"]) and (string(properties["$browser"]) == "Chrome") and (string(properties["mp_country_code"]) != "CN") and (string(properties["origin"]) != "invite")'
+        });
+        
+        var paid = MP.api.segment('Viewed report', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90,
+            where: 'boolean(user["is paid"]) == true'
+        });
+        
+        var first_payment = MP.api.segment('$custom_event:56005', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90
+        });
+        
+        var warned = MP.api.segment('personal warned email sent', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90
+        });
+        
+        
+        var blocked = MP.api.segment('personal blocked email sent', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90
+        });
+        
+        var viewed_pricing_page = MP.api.segment('View pricing page', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90,
+            where: 'boolean(properties["user_id"]) == true'
+        });
+        
+        var badge_added = MP.api.segment('badge added', null, {
+            from: moment().subtract(36, 'months'),
+            to: moment(),
+            type: 'unique',
+            interval: 90
+        });
+        
+        $.when(homepage, signups, paid, first_payment, viewed_pricing_page, badge_added, warned, blocked).done(
+            function(homepage, signups, paid, first_payment, viewed_pricing_page, badge_added, warned, blocked) { 
+              $chart.MPChart({
+                    chartType: 'line'
+                });
+                
+                var myFilter = function(val) {
+                  return val > 0;
+                };
+                
+                $chart.MPChart('addSeries', homepage.filter(myFilter));
+                $chart.MPChart('addSeries', signups.filter(myFilter));
+                
+                // $chart.MPChart('addSeries', warned.filter(myFilter));
+                $chart.MPChart('addSeries', blocked.filter(myFilter));
+                $chart.MPChart('addSeries', viewed_pricing_page.filter(myFilter));
+                
+                $chart.MPChart('addSeries', badge_added.filter(myFilter));
+                // $chart.MPChart('addSeries', paid.filter(myFilter));
+                $chart.MPChart('addSeries', first_payment.filter(myFilter));
+            });
+        });
     </script>
   </body>
 </html>
+
