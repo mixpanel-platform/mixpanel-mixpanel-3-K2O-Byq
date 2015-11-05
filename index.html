@@ -17,11 +17,11 @@
     };
     var pricing_to_payment = MP.api.funnel('View pricing page', 'First payment', params)
     
-   $.when(pricing_to_payment).done(
+  $.when(pricing_to_payment).done(
            function(pricing_to_payment) { 
-             $chart.MPChart({
-                   chartType: 'line'
-               });
+             // $chart.MPChart({
+             //       chartType: 'line'
+             //   });
                
                var myFilter = function(val) {
                  return val > 0;
