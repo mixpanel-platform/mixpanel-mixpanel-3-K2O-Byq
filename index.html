@@ -20,7 +20,7 @@
       <div style="clear: both;"></div>
       <div id="dateSelect" style="float: left;"></div>
       <div style="clear: both;"></div>
-      <button id="runQuery">Run Query</button>
+      <button id="runQuery" class="mixpanel-platform-label" style="width: 100px;">Run Query</button>
       <div style="clear: both;"></div>
       <div id="activityLevel"></div>
       <div style="clear: both;"></div>
@@ -32,6 +32,13 @@
     </div>
     <div id="table"></div>
     <script>
+
+      // Questions
+      // 1. how to filter by a property value
+      // 2. why don't all the events show up in the dropdown e.g. [Flows] Change flow direction
+
+
+
       var activityLevelJQL = `
 	  function main() {
 	    return Events({
@@ -42,7 +49,7 @@
 	      ]
 	    })
 	      .groupByUser(mixpanel.reducer.count())
-	      .reduce(mixpanel.reducer.numeric_percentiles("value", params.activity_level_bounds || [25, 75, 90, 95, 99]))
+	      .reduce(mixpanel.reducer.numeric_percentiles("value", params.activity_percentiles || [25, 75, 90, 95, 99]))
 	  };
 `;
       var relativeScaleJQL =
@@ -79,7 +86,7 @@
 	    ...params.effect_selectors,
 	    ...params.cause_selectors
 	  ]
-	}), subquery, {behavior_name: "activity_level", type: "left"})
+	}), subquery, {behavior_name: "activity_level", type: "left", selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]})
 	// For each user, return an object {treatmentTime: int, effectCounts: int[]}
 	// treatmentTime is the timestamp of the first time the user did the treatment or null if they never did.
 	// effectCounts is a list of counts of the effect event for each day after the treatment event was performed.
@@ -106,7 +113,7 @@
 	  })
 	// */ // .filter((u) => u.value.treatmentTime !== null)
 	// .reduce(mixpanel.reducer.count())
-	  .groupBy([mixpanel.numeric_bucket("value.activity_level", params.activity_level_bounds || [25, 75, 90, 95, 99])],
+	  .groupBy([mixpanel.numeric_bucket("value.activity_level", params.activity_level_bounds)],
 
 		   //.reduce(
 		   function(countAccumulators, countObjects) {
@@ -194,10 +201,14 @@
 	      }),
 	      People(),
 	      {
-		type: \"inner\",
-		selectors:[{selector: '(not \"mixpanel.com\" in user[\"$email\"])'}]
+		type: "inner",
+		selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]
 	      })
 	      .map(function(t) { return t.event; })
+
+
+// TODO remove this once the whole thing is implemented in jql- this is just to get it to return quickly
+.groupBy(["name"], mixpanel.reducer.count());
 	  }
 `;
 
@@ -212,15 +223,11 @@
       var dateSelect  = $('#dateSelect').MPDatepicker();
       // var unit = ''; TODO
 
-      /*
-      var eventGraph  = $('#graph').MPChart({chartType: 'line'});
-      var eventTable  = $('#table').MPTable({
-        showPercentages: true,
-        firstColHeader: 'Event'
-      });
-      */
-
       var runQuery = function() {
+	$('#activityLevel').empty();
+	$('#relativeScale').empty();
+	$('#absoluteScale').empty();
+
         var causeEventName = causeEventSelect.MPEventSelect('value'),
             causePropName  = causePropSelect.MPPropertySelect('value'),
 	    effectEventName = effectEventSelect.MPEventSelect('value'),
@@ -232,51 +239,37 @@
 	  to_date: dateRange.to.toISOString().slice(0,10),
 	  cause_selectors: [{event: causeEventName}],
 	  effect_selectors: [{event: effectEventName}],
-          activity_level_bounds: [25, 75, 90, 95, 99],
-        window: 30
+	  activity_percentiles: [25, 75, 90, 95, 99],
+          window: 30
 	};
 
-	if (effectEventName) {
-	  // activity level
-	  MP.api.jql(activityLevelJQL, params).done(function(results) {
-		       console.log("params:", params);
-		       console.log("Activity level results:", results);
-		       $('#activityLevel').append($('<h1>').append('<br><br>Activity level: <br>'));
-		       $('#activityLevel').append(results);
-		     });
-	}
+      if (causeEventName && effectEventName) {
+	console.log("Running activity level with params:", params);
+	// activity level
+	MP.api.jql(activityLevelJQL, params).done(function(results) {
+	  console.log("Activity level results:", results);
+	  $('#activityLevel').append($('<h1>').append('<br><br>Activity level: <br>'));
+	  $('#activityLevel').append(results[0].toString());
 
-
-	if (causeEventName && effectEventName) {
 	  // relative scale
+	  params['activity_level_bounds'] = results[0].map(x => x["value"]);
+	  console.log("Running relative scale with params:", params);
 	  MP.api.jql(relativeScaleJQL, params).done(function(results) {
-		       console.log("params:", params);
-		       console.log("Relative scale results:", results);
-		       $('#relativeScale').append($('<h1>').append('<br><br>Relative scale: <br>'));
-		       $('#relativeScale').append(results);
-		     });
-	}
+	    console.log("Relative scale results:", results);
+	    $('#relativeScale').append($('<h1>').append('<br><br>Relative scale: <br>'));
+	    $('#relativeScale').append(results.toString());
+	  });
 
-	if (causeEventName && effectEventName) {
 	  // absolute scale
-	  /*
+	  console.log("Running absolute scale with params:", params);
 	  MP.api.jql(absoluteScaleJQL, params).done(function(results) {
-		       console.log("params:", params);
-		       console.log("Absolute scale results:", results);
-		       $('#absoluteScale').append($('<h1>').append('<br><br>Absolute scale: <br>'));
-		       $('#absoluteScale').append(results);
-		     });
-	  */
-	}
+	    console.log("Absolute scale results:", results);
+	    $('#absoluteScale').append($('<h1>').append('<br><br>Absolute scale: <br>'));
+	    $('#absoluteScale').append(results.toString());
+	  });
+	});
+      }
 
-	/*
-        if (eventName) {
-          MP.api.segment(eventName, propName, dateRange).done(function(results) {
-            eventGraph.MPChart('setData', results);
-            eventTable.MPTable('setData', results);
-          });
-        }
-	*/
       };
       causeEventSelect.on('change', function(e, eventName) {
         $("#causeFilter").show();
@@ -295,47 +288,6 @@
 	effectPropSelect.MPPropertySelect('setEvent', eventName);
       });
       $('#runQuery').on('click', runQuery);
-
-
-/*
-    var params = {
-    from: moment().subtract(36, 'months'),
-    to: moment(),
-    interval:90,
-    length:10,
-    };
-    var pricing_to_payment = MP.api.funnel('View pricing page', 'First payment', params)
-
-  $.when(pricing_to_payment).done(
-             function(pricing_to_payment) {
-
-                 var conversions = {}
-
-                 console.log(pricing_to_payment[1])
-                 for (date in pricing_to_payment[1]){
-                    conversions[date] = pricing_to_payment[1][date]["step_conv_ratio"]
-                 }
-                 var data = {}
-                 data["pricing page to payment"] = conversions
-                 var lineChart = $('<div></div>').appendTo('body').MPChart({chartType: 'line', highchartsOptions: {
-                     tooltip: {
-                         backgroundColor: '#fffce7'  // Make tooltip background yellow
-                     }
-                 }});                                // Create a line chart
-                 lineChart.MPChart('setData', data); // Set the chart's data
-                 console.log(conversions)
-               // $chart.MPChart('addSeries', homepage.filter(myFilter));
-               // $chart.MPChart('addSeries', signups.filter(myFilter));
-
-               // // $chart.MPChart('addSeries', warned.filter(myFilter));
-               // $chart.MPChart('addSeries', blocked.filter(myFilter));
-               // $chart.MPChart('addSeries', viewed_pricing_page.filter(myFilter));
-
-               // $chart.MPChart('addSeries', badge_added.filter(myFilter));
-               // // $chart.MPChart('addSeries', paid.filter(myFilter));
-               // $chart.MPChart('addSeries', first_payment.filter(myFilter));
-           });
-*/
     </script>
   </body>
 </html>
