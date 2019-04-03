@@ -1,4 +1,4 @@
-# mixpanel-mixpanel-3-K2O-Byq
+# Launch Analysis MVP
 
 Edit: https://mixpanel.com/report/3/mpplatform/35567#edit
 
