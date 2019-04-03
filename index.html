@@ -252,7 +252,7 @@
 	  $('#activityLevel').append(results[0].toString());
 
 	  // relative scale
-	  var activity_level_bounds = results[0].map(x => x["value"]); // TODO ascending order
+	  var activity_level_bounds = [...new Set(results[0].map(x => x["value"]))].sort();
 	  params['activity_level_bounds'] = activity_level_bounds;
 	  console.log("Running relative scale with params:", params);
 	  MP.api.jql(relativeScaleJQL, params).done(function(results) {
