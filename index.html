@@ -232,7 +232,8 @@
 	  to_date: dateRange.to.toISOString().slice(0,10),
 	  cause_selectors: [{event: causeEventName}],
 	  effect_selectors: [{event: effectEventName}],
-          activity_level_bounds: [25, 75, 90, 95, 99]
+          activity_level_bounds: [25, 75, 90, 95, 99],
+        window: 30
 	};
 
 	if (effectEventName) {
