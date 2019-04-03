@@ -7,8 +7,296 @@
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
   </head>
   <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
+    <div class="mixpanel-platform-section">
+      <h1>Cause:</h1>
+      <div id="causeEventSelect" style="float: left;"></div>
+      <button id="causeFilter" class="mixpanel-platform-label" style="width: 80px; margin-left: 10px; display: none;">+ Filter</button>
+      <div id="causePropSelect" style="float: left; margin-left: 10px"></div>
+      <div style="clear: both;"></div>
+      <h1>Effect:</h1>
+      <div id="effectEventSelect" style="float: left;"></div>
+      <button id="effectFilter" class="mixpanel-platform-label" style="width: 80px; margin-left: 10px; display: none;">+ Filter</button>
+      <div id="effectPropSelect" style="float: left; margin-left: 10px;"></div>
+      <div style="clear: both;"></div>
+      <div id="dateSelect" style="float: left;"></div>
+      <div style="clear: both;"></div>
+      <button id="runQuery">Run Query</button>
+      <div style="clear: both;"></div>
+      <div id="activityLevel"></div>
+      <div style="clear: both;"></div>
+      <div id="relativeScale"></div>
+      <div style="clear: both;"></div>
+      <div id="absoluteScale"></div>
+      <div style="clear: both;"></div>
+      <div id="graph"></div>
+    </div>
+    <div id="table"></div>
     <script>
+      var activityLevelJQL = `
+	  function main() {
+	    return Events({
+	      from_date: params.from_date,
+	      to_date: params.to_date,
+	      event_selectors: [
+		...params.effect_selectors
+	      ]
+	    })
+	      .groupByUser(mixpanel.reducer.count())
+	      .reduce(mixpanel.reducer.numeric_percentiles("value", params.activity_level_bounds || [25, 75, 90, 95, 99]))
+	  };
+`;
+      var relativeScaleJQL =
+	  `
+  var PROJECT_TIME_OFFSET = 7 * 60 * 60 * 1000;
+
+      function timestampToDaysSinceEpoch(ts) {
+	return Math.floor(ts / (1000 * 3600 * 24));
+      }
+
+      function dateToDaysSinceEpoch(date) {
+	return timestampToDaysSinceEpoch(date.getTime());
+      }
+
+      function emptyTimeseries(length) {
+	return (new Array(length)).fill(0);
+      }
+
+      var from = dateToDaysSinceEpoch(new Date(Date.parse(params.from_date)));
+      var to = dateToDaysSinceEpoch(new Date(Date.parse(params.to_date)));
+      var timeseriesLength = (to - from + 1);
+
+      var subquery = Events({
+	from_date: params.from_date,
+	to_date: params.to_date,
+	event_selectors: params.effect_selectors
+      }).groupByUser(mixpanel.reducer.count());
+
+      function main() {
+	return join(Events({
+	  from_date: params.from_date,
+	  to_date:   params.to_date,
+	  event_selectors: [
+	    ...params.effect_selectors,
+	    ...params.cause_selectors
+	  ]
+	}), subquery, {behavior_name: "activity_level", type: "left"})
+	// For each user, return an object {treatmentTime: int, effectCounts: int[]}
+	// treatmentTime is the timestamp of the first time the user did the treatment or null if they never did.
+	// effectCounts is a list of counts of the effect event for each day after the treatment event was performed.
+	// /*
+	  .groupByUser((state, events) => {
+	    state = state || {treatmentTime: null, effectCounts: emptyTimeseries(timeseriesLength), firstEffectTime: null};
+	    for(var i = 0; i< events.length; i++) {
+	      if (events[i].behaviors && events[i].behaviors.activity_level) {
+		state.activity_level = events[i].behaviors.activity_level;
+	      }
+	      var event = events[i].event;
+	      if (event.labels && event.labels.includes("$treatment") && state.treatmentTime === null) {
+		state.treatmentTime = event.time + PROJECT_TIME_OFFSET;
+	      }
+	      if (event.labels && event.labels.includes("$effect")) {
+		var index = timestampToDaysSinceEpoch(event.time + PROJECT_TIME_OFFSET) - from;
+		state.effectCounts[index] += 1;
+		if (index >= params.window && index < state.effectCounts.length - params.window && state.firstEffectTime === null) {
+		  state.firstEffectTime = event.time + PROJECT_TIME_OFFSET;
+		}
+	      }
+	    }
+	    return state;
+	  })
+	// */ // .filter((u) => u.value.treatmentTime !== null)
+	// .reduce(mixpanel.reducer.count())
+	  .groupBy([mixpanel.numeric_bucket("value.activity_level", params.activity_level_bounds || [25, 75, 90, 95, 99])],
+
+		   //.reduce(
+		   function(countAccumulators, countObjects) {
+		     // accume holds the number of treatment users, and a time series with the average events per day for some period
+		     // before and after the treatment event is first performed.
+		     var accume = {
+		       treatment: {
+			 userCount: 0,
+			 effectTimeseries: emptyTimeseries(2 * params.window + 1)
+		       },
+		       control: {
+			 userCount: 0,
+			 effectTimeseries: emptyTimeseries(2 * params.window + 1)
+		       }
+		     };
+
+		     // Add all the accumulators
+		     for(var i = 0; i < countAccumulators.length; i++) {
+		       currentAccume = countAccumulators[i];
+		       accume.treatment.userCount += currentAccume.treatment.userCount;
+		       accume.control.userCount += currentAccume.control.userCount;
+		       for(var j = 0; j < currentAccume.treatment.effectTimeseries.length; j++) {
+			 if (currentAccume.treatment.effectTimeseries[j]) {
+			   accume.treatment.effectTimeseries[j] += (currentAccume.treatment.effectTimeseries[j] *
+								    currentAccume.treatment.userCount);
+			 }
+			 if (currentAccume.control.effectTimeseries[j]) {
+			   accume.control.effectTimeseries[j] += (currentAccume.control.effectTimeseries[j] *
+								  currentAccume.control.userCount);
+			 }
+		       }
+		     }
+
+		     // Add all the individual counts
+		     for(i = 0; i < countObjects.length; i++) {
+		       var currentCount = countObjects[i].value;
+		       if (!currentCount.treatmentTime) { // temporarily only look at people who've had the treatment
+			 // This group never did the treatment event
+			 var index = timestampToDaysSinceEpoch(currentCount.firstEffectTime) - from;
+			 if (index >= params.window && index < currentCount.effectCounts.length - params.window) {
+			   accume.control.userCount += 1;
+			   for(var j = index - params.window; j < index + params.window; j++) {
+			     accume.control.effectTimeseries[j - (index - params.window)] += currentCount.effectCounts[j];
+			   }
+			 }
+		       } else {
+			 // This group did the treatment event
+			 var index = timestampToDaysSinceEpoch(currentCount.treatmentTime) - from;
+			 if (index >= params.window && index < currentCount.effectCounts.length - params.window) {
+			   accume.treatment.userCount += 1;
+			   for(var j = index - params.window; j < index + params.window; j++) {
+			     accume.treatment.effectTimeseries[j - (index - params.window)] += currentCount.effectCounts[j];
+			   }
+			 }
+		       }
+		     }
+		     // Normalize to get the average effectEvents per day
+		     for (var relativeDay = 0; relativeDay < accume.treatment.effectTimeseries.length; relativeDay++) {
+		       if (accume.treatment.userCount && accume.treatment.effectTimeseries[relativeDay]) {
+			 accume.treatment.effectTimeseries[relativeDay] = (1.0 * accume.treatment.effectTimeseries[relativeDay]) / accume.treatment.userCount;
+		       }
+		       if (accume.control.userCount && accume.control.effectTimeseries[relativeDay]) {
+			 accume.control.effectTimeseries[relativeDay] = (1.0 * accume.control.effectTimeseries[relativeDay]) / accume.control.userCount;
+		       }
+		     }
+		     return accume;
+		   }
+		  )
+    .filter(function(item) {
+      return item.value.control.userCount > 0 && item.value.treatment.userCount > 0;
+    });
+}
+`;
+
+      var absoluteScaleJQL =`
+	  function main() {
+	    return join(
+	      Events({
+		from_date: params.from_date,
+		to_date:   params.to_date,
+		event_selectors: [
+		  ...params.effect_selectors,
+		  ...params.cause_selectors
+		]
+	      }),
+	      People(),
+	      {
+		type: \"inner\",
+		selectors:[{selector: '(not \"mixpanel.com\" in user[\"$email\"])'}]
+	      })
+	      .map(function(t) { return t.event; })
+	  }
+`;
+
+
+      // var userCohort = ''; TODO
+      var causeEventSelect = $('#causeEventSelect').MPEventSelect();
+      var causePropSelect  = $('#causePropSelect').MPPropertySelect();
+
+      var effectEventSelect = $('#effectEventSelect').MPEventSelect();
+      var effectPropSelect  = $('#effectPropSelect').MPPropertySelect();
+
+      var dateSelect  = $('#dateSelect').MPDatepicker();
+      // var unit = ''; TODO
+
+      /*
+      var eventGraph  = $('#graph').MPChart({chartType: 'line'});
+      var eventTable  = $('#table').MPTable({
+        showPercentages: true,
+        firstColHeader: 'Event'
+      });
+      */
+
+      var runQuery = function() {
+        var causeEventName = causeEventSelect.MPEventSelect('value'),
+            causePropName  = causePropSelect.MPPropertySelect('value'),
+	    effectEventName = effectEventSelect.MPEventSelect('value'),
+            effectPropName  = effectPropSelect.MPPropertySelect('value'),
+            dateRange = dateSelect.MPDatepicker('value');
+
+	var params = {
+	  from_date: dateRange.from.toISOString().slice(0,10),
+	  to_date: dateRange.to.toISOString().slice(0,10),
+	  cause_selectors: [{event: causeEventName}],
+	  effect_selectors: [{event: effectEventName}],
+          activity_level_bounds: [25, 75, 90, 95, 99]
+	};
+
+	if (effectEventName) {
+	  // activity level
+	  MP.api.jql(activityLevelJQL, params).done(function(results) {
+		       console.log("params:", params);
+		       console.log("Activity level results:", results);
+		       $('#activityLevel').append($('<h1>').append('<br><br>Activity level: <br>'));
+		       $('#activityLevel').append(results);
+		     });
+	}
+
+
+	if (causeEventName && effectEventName) {
+	  // relative scale
+	  MP.api.jql(relativeScaleJQL, params).done(function(results) {
+		       console.log("params:", params);
+		       console.log("Relative scale results:", results);
+		       $('#relativeScale').append($('<h1>').append('<br><br>Relative scale: <br>'));
+		       $('#relativeScale').append(results);
+		     });
+	}
+
+	if (causeEventName && effectEventName) {
+	  // absolute scale
+	  /*
+	  MP.api.jql(absoluteScaleJQL, params).done(function(results) {
+		       console.log("params:", params);
+		       console.log("Absolute scale results:", results);
+		       $('#absoluteScale').append($('<h1>').append('<br><br>Absolute scale: <br>'));
+		       $('#absoluteScale').append(results);
+		     });
+	  */
+	}
+
+	/*
+        if (eventName) {
+          MP.api.segment(eventName, propName, dateRange).done(function(results) {
+            eventGraph.MPChart('setData', results);
+            eventTable.MPTable('setData', results);
+          });
+        }
+	*/
+      };
+      causeEventSelect.on('change', function(e, eventName) {
+        $("#causeFilter").show();
+      });
+      $('#causeFilter').on('click', function() {
+	$("#causeFilter").hide();
+	var eventName = causeEventSelect.MPEventSelect('value');
+	causePropSelect.MPPropertySelect('setEvent', eventName);
+      });
+      effectEventSelect.on('change', function(e, eventName) {
+        $("#effectFilter").show();
+      });
+      $('#effectFilter').on('click', function() {
+	$("#effectFilter").hide();
+	var eventName = effectEventSelect.MPEventSelect('value');
+	effectPropSelect.MPPropertySelect('setEvent', eventName);
+      });
+      $('#runQuery').on('click', runQuery);
+
+
+/*
     var params = {
     from: moment().subtract(36, 'months'),
     to: moment(),
@@ -16,10 +304,10 @@
     length:10,
     };
     var pricing_to_payment = MP.api.funnel('View pricing page', 'First payment', params)
-    
+
   $.when(pricing_to_payment).done(
-             function(pricing_to_payment) { 
-                
+             function(pricing_to_payment) {
+
                  var conversions = {}
 
                  console.log(pricing_to_payment[1])
@@ -37,15 +325,16 @@
                  console.log(conversions)
                // $chart.MPChart('addSeries', homepage.filter(myFilter));
                // $chart.MPChart('addSeries', signups.filter(myFilter));
-               
+
                // // $chart.MPChart('addSeries', warned.filter(myFilter));
                // $chart.MPChart('addSeries', blocked.filter(myFilter));
                // $chart.MPChart('addSeries', viewed_pricing_page.filter(myFilter));
-               
+
                // $chart.MPChart('addSeries', badge_added.filter(myFilter));
                // // $chart.MPChart('addSeries', paid.filter(myFilter));
                // $chart.MPChart('addSeries', first_payment.filter(myFilter));
            });
+*/
     </script>
   </body>
 </html>
