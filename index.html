@@ -14,8 +14,8 @@
       <div style="clear: both; padding: 10px"></div>
       <h1 id="causeFilteredBy" style="float:left; margin-left: 50px; display:none;">Filtered by:</h1>
       <div id="causePropSelect" style="float: left; margin-left: 10px"></div>
-      <div id="causeOperator" style="float: left; margin-left: 10px; display: none;"></div>
-      <div id="causeOperand" style="float: left; margin-left: 10px; display: none;"></div>
+      <div id="causeOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
+      <div id="causeOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div style="clear: both; padding: 10px;"></div>
       <h1>Effect:</h1>
       <div id="effectEventSelect" style="float: left;"></div>
@@ -23,8 +23,8 @@
       <div style="clear: both; padding: 10px"></div>
       <h1 id="effectFilteredBy" style="float:left; margin-left: 50px; display:none;">Filtered by:</h1>
       <div id="effectPropSelect" style="float: left; margin-left: 10px;"></div>
-      <div id="effectOperator" style="float: left; margin-left: 10px; display: none;"></div>
-      <div id="effectOperand" style="float: left; margin-left: 10px; display: none;"></div>
+      <div id="effectOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
+      <div id="effectOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div style="clear: both; padding: 10px;"></div>
       <h1>Date Range:</h1>
       <div id="dateSelect" style="float: left;"></div>
@@ -225,7 +225,7 @@
       // var userCohort = ''; TODO
       var causeEventSelect = $('#causeEventSelect').MPEventSelect();
       var causePropSelect  = $('#causePropSelect').MPPropertySelect();
-      var causeOperator = $('#causeOperator').MPSelect({items: [{label: '==', value: '=='},
+      var causeOperatorSelect = $('#causeOperatorSelect').MPSelect({items: [{label: '==', value: '=='},
 								{label: '!=', value: '!='},
 								{label: '>', value: '>'},
 								{label: '<', value: '<'},
@@ -234,11 +234,12 @@
 								{label: 'set', value: 'set'},
 								{label: 'not set', value: 'not set'},
 							       ]});
-      causeOperator.val('==');
+      causeOperatorSelect.val('==');
+      var causeOperandSelect = '';
 
       var effectEventSelect = $('#effectEventSelect').MPEventSelect();
       var effectPropSelect  = $('#effectPropSelect').MPPropertySelect();
-      var effectOperator = $('#effectOperator').MPSelect({items: [{label: '==', value: '=='},
+      var effectOperatorSelect = $('#effectOperatorSelect').MPSelect({items: [{label: '==', value: '=='},
 								{label: '!=', value: '!='},
 								{label: '>', value: '>'},
 								{label: '<', value: '<'},
@@ -247,7 +248,8 @@
 								{label: 'set', value: 'set'},
 								{label: 'not set', value: 'not set'},
 							       ]});
-      effectOperator.val('==');
+      effectOperatorSelect.val('==');
+      var effectOperandSelect = '';
 
       var dateSelect  = $('#dateSelect').MPDatepicker();
       // var unit = ''; TODO
@@ -259,15 +261,29 @@
 
         var causeEventName = causeEventSelect.MPEventSelect('value'),
             causePropName  = causePropSelect.MPPropertySelect('value'),
+	    causeOperator = causeOperatorSelect.MPSelect('value'),
+	    causeOperand = (typeof causeOperandSelect === 'string' ? '' : causeOperandSelect.MPSelect('value')),
 	    effectEventName = effectEventSelect.MPEventSelect('value'),
             effectPropName  = effectPropSelect.MPPropertySelect('value'),
+	    effectOperator = effectOperatorSelect.MPSelect('value'),
+	    effectOperand = (typeof effectOperandSelect === 'string' ? '' : effectOperandSelect.MPSelect('value')),
             dateRange = dateSelect.MPDatepicker('value');
 
+	console.log("causePropName:", typeof causePropName, causePropName);
+	console.log("causeOperator:", typeof causeOperator, causeOperator);
+	console.log("causeOperand:", typeof causeOperand, causeOperand);
+	var causeSelector = '';
+	if (causePropName instanceof String) {
+	  causeSelector = ''; // "properties[\"{0}\"] {1} {2}"
+	}
+	var effectSelector = '';
 	var params = {
 	  from_date: dateRange.from.toISOString().slice(0,10),
 	  to_date: dateRange.to.toISOString().slice(0,10),
-	  cause_selectors: [{event: causeEventName}],
-	  effect_selectors: [{event: effectEventName}],
+	  cause_selectors: [{event: causeEventName,
+			     selector: causeSelector,}],
+	  effect_selectors: [{event: effectEventName,
+			      selector: effectSelector,}],
 	  activity_percentiles: [25, 75, 90, 95, 99],
           window: 30
 	};
@@ -300,6 +316,7 @@
 	});
       }
       };
+
       // cause selection
       causeEventSelect.on('change', function(e, eventName) {
         $("#causeFilter").show();
@@ -311,15 +328,16 @@
 	causePropSelect.MPPropertySelect('setEvent', eventName);
       });
       causePropSelect.on('change', function(e, propName) {
-        $("#causeOperator").show();
-	$("#causeOperand").empty();
+        causeOperatorSelect.show();
+	$("#causeOperandSelect").empty();
 	var eventName = causeEventSelect.MPEventSelect('value');
 	var propName = causePropSelect.MPPropertySelect('value');
 	MP.api.propertyValues(eventName, propName, {limit: 255}).done(function(properties) {
-	  console.log(properties.values());
+	  //console.log(properties.values());
 	  var props = _.map(properties.values(), function(item, key) {return {label: item, value: item};});
-	  $("#causeOperand").append($("<div></div>").MPSelect({items: props}));
-	  $("#causeOperand").show();
+	  causeOperandSelect = $("<div></div>").MPSelect({items: props});
+	  $("#causeOperandSelect").append(causeOperandSelect);
+	  $("#causeOperandSelect").show();
 	});
       });
 
@@ -334,15 +352,16 @@
 	effectPropSelect.MPPropertySelect('setEvent', eventName);
       });
      effectPropSelect.on('change', function(e, propName) {
-        $("#effectOperator").show();
-	$("#effectOperand").empty();
+        effectOperatorSelect.show();
+	$("#effectOperandSelect").empty();
 	var eventName = effectEventSelect.MPEventSelect('value');
 	var propName = effectPropSelect.MPPropertySelect('value');
 	MP.api.propertyValues(eventName, propName, {limit: 255}).done(function(properties) {
-	  console.log(properties.values());
+	  //console.log(properties.values());
 	  var props = _.map(properties.values(), function(item, key) {return {label: item, value: item};});
-	  $("#effectOperand").append($("<div></div>").MPSelect({items: props}));
-	  $("#effectOperand").show();
+	  effectOperandSelect = $("<div></div>").MPSelect({items: props});
+	  $("#effectOperandSelect").append(effectOperandSelect);
+	  $("#effectOperandSelect").show();
 	});
       });
 
