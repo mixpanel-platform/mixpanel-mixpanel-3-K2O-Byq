@@ -5,10 +5,17 @@
     <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/css/reset.css">
     <link rel="stylesheet" type="text/css" href="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.css">
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
+    <style>
+      .big {
+	  font-size: 150%;
+	  text-align: center;
+    }
+    </style>
   </head>
   <body class="mixpanel-platform-body">
     <div class="mixpanel-platform-section">
-      <h1>Cause:</h1>
+      <h1 class="big">Launch Analysis</h1>
+      <h1>How did a new launch event (cause)</h1>
       <div id="causeEventSelect" style="float: left;"></div>
       <button id="causeFilter" class="mixpanel-platform-label" style="width: 80px; margin-left: 10px; display: none;">+ Filter</button>
       <div style="clear: both; padding: 10px"></div>
@@ -17,7 +24,7 @@
       <div id="causeOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div id="causeOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div style="clear: both; padding: 10px;"></div>
-      <h1>Effect:</h1>
+      <h1>impact my KPI (effect)</h1>
       <div id="effectEventSelect" style="float: left;"></div>
       <button id="effectFilter" class="mixpanel-platform-label" style="width: 80px; margin-left: 10px; display: none;">+ Filter</button>
       <div style="clear: both; padding: 10px"></div>
@@ -26,7 +33,7 @@
       <div id="effectOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div id="effectOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div style="clear: both; padding: 10px;"></div>
-      <h1>Date Range:</h1>
+      <h1>in this date range (launch event must be introduced within this range)?</h1>
       <div id="dateSelect" style="float: left;"></div>
       <div style="clear: both; padding: 10px;"></div>
       <button id="runQuery" class="mixpanel-platform-label" style="width: 100px;">Run Query</button>
@@ -43,8 +50,7 @@
     <script>
 
       // Questions
-      // 1. how to filter by a property value
-      // 2. why don't all the events show up in the dropdown e.g. [Flows] Change flow direction
+      // 1. why don't all the events show up in the dropdown e.g. [Flows] Change flow direction
 
 
 
@@ -226,33 +232,58 @@
       var causeEventSelect = $('#causeEventSelect').MPEventSelect();
       var causePropSelect  = $('#causePropSelect').MPPropertySelect();
       var causeOperatorSelect = $('#causeOperatorSelect').MPSelect({items: [{label: '==', value: '=='},
-								{label: '!=', value: '!='},
-								{label: '>', value: '>'},
-								{label: '<', value: '<'},
-								{label: 'in', value: 'in'},
-								{label: 'not in', value: 'not in'},
-								{label: 'set', value: 'set'},
-								{label: 'not set', value: 'not set'},
-							       ]});
+									    {label: '!=', value: '!='},
+									    {label: '>', value: '>'},
+									    {label: '<', value: '<'},
+									    {label: 'contains', value: 'in'},
+									    {label: 'does not contain', value: 'not in'},
+									    {label: 'set', value: 'set'},
+									    {label: 'not set', value: 'not set'},]});
       causeOperatorSelect.val('==');
       var causeOperandSelect = '';
 
       var effectEventSelect = $('#effectEventSelect').MPEventSelect();
       var effectPropSelect  = $('#effectPropSelect').MPPropertySelect();
       var effectOperatorSelect = $('#effectOperatorSelect').MPSelect({items: [{label: '==', value: '=='},
-								{label: '!=', value: '!='},
-								{label: '>', value: '>'},
-								{label: '<', value: '<'},
-								{label: 'in', value: 'in'},
-								{label: 'not in', value: 'not in'},
-								{label: 'set', value: 'set'},
-								{label: 'not set', value: 'not set'},
-							       ]});
+									      {label: '!=', value: '!='},
+									      {label: '>', value: '>'},
+									      {label: '<', value: '<'},
+									      {label: 'contains', value: 'in'},
+									      {label: 'does not contain', value: 'not in'},
+									      {label: 'set', value: 'set'},
+									      {label: 'not set', value: 'not set'},]});
       effectOperatorSelect.val('==');
       var effectOperandSelect = '';
 
       var dateSelect  = $('#dateSelect').MPDatepicker();
       // var unit = ''; TODO
+
+      var formatSelector = function(propName, operator, operand) {
+	var selector = '';
+	if (operand && typeof propName == 'string') {
+	  switch (operator) {
+	  case '==':
+	  case '!=':
+	  case '>':
+	  case '<':
+	    selector = `string(properties["${propName}"]) ${operator} "${operand}"`;
+	    break;
+	  case 'in':
+	    selector = `"${operand}" in string(properties["${propName}"])`;
+	    break;
+	  case 'not in':
+	    selector = `not "${operand}" in string(properties["${propName}"])`;
+	    break;
+	  case 'set':
+	    selector = `defined (properties["${propName}"])`;
+	    break;
+	  case 'not set':
+	    selector = `not defined (properties["${propName}"])`;
+	    break;
+	  }
+	}
+	return selector;
+      };
 
       var runQuery = function() {
 	$('#activityLevel').empty();
@@ -272,11 +303,8 @@
 	console.log("causePropName:", typeof causePropName, causePropName);
 	console.log("causeOperator:", typeof causeOperator, causeOperator);
 	console.log("causeOperand:", typeof causeOperand, causeOperand);
-	var causeSelector = '';
-	if (causePropName instanceof String) {
-	  causeSelector = ''; // "properties[\"{0}\"] {1} {2}"
-	}
-	var effectSelector = '';
+	var causeSelector = formatSelector(causePropName, causeOperator, causeOperand);
+	var effectSelector = formatSelector(effectPropName, effectOperator, effectOperand);
 	var params = {
 	  from_date: dateRange.from.toISOString().slice(0,10),
 	  to_date: dateRange.to.toISOString().slice(0,10),
