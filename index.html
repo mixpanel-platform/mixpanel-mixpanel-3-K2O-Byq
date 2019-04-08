@@ -9,7 +9,28 @@
       .big {
 	  font-size: 150%;
 	  text-align: center;
-    }
+      }
+      input {
+        font-family:  system, -apple-system, ".SFNSDisplay-Regular", "Helvetica Neue", sans-serif;
+        font-weight: normal;
+        letter-spacing: 0.03em;
+        font-size: 13px;
+        color: #747d94;
+        height: 20px;
+        width: 455px;
+        margin: 0 0 10px 0;
+        padding: 5px;
+        border: 1px solid #bdc7d2;
+        -webkit-border-radius: 3px;
+        border-radius: 3px;
+        position: relative;
+        -webkit-appearance: textfield;
+        background-color: white;
+      }
+      input:focus, input:hover {
+        outline: 0;
+        border-color: #5ba7e1;
+      }
     </style>
   </head>
   <body class="mixpanel-platform-body">
@@ -23,6 +44,7 @@
       <div id="causePropSelect" style="float: left; margin-left: 10px"></div>
       <div id="causeOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div id="causeOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
+      <input id="causeOperandTextBox" style="float: left; margin-left: 10px; display: none;">
       <div style="clear: both; padding: 10px;"></div>
       <h1>impact my KPI (effect)</h1>
       <div id="effectEventSelect" style="float: left;"></div>
@@ -32,6 +54,7 @@
       <div id="effectPropSelect" style="float: left; margin-left: 10px;"></div>
       <div id="effectOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div id="effectOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
+      <input id="effectOperandTextBox" style="float: left; margin-left: 10px; display: none;">
       <div style="clear: both; padding: 10px;"></div>
       <h1>in this date range (launch event must be introduced within this range)?</h1>
       <div id="dateSelect" style="float: left;"></div>
@@ -235,8 +258,8 @@
 									    {label: '!=', value: '!='},
 									    {label: '>', value: '>'},
 									    {label: '<', value: '<'},
-									    {label: 'contains', value: 'in'},
-									    {label: 'does not contain', value: 'not in'},
+									    {label: 'contains', value: 'contains'},
+									    {label: 'does not contain', value: 'does not contain'},
 									    {label: 'set', value: 'set'},
 									    {label: 'not set', value: 'not set'},]});
       causeOperatorSelect.val('==');
@@ -248,8 +271,8 @@
 									      {label: '!=', value: '!='},
 									      {label: '>', value: '>'},
 									      {label: '<', value: '<'},
-									      {label: 'contains', value: 'in'},
-									      {label: 'does not contain', value: 'not in'},
+									      {label: 'contains', value: 'contains'},
+									      {label: 'does not contain', value: 'does not contain'},
 									      {label: 'set', value: 'set'},
 									      {label: 'not set', value: 'not set'},]});
       effectOperatorSelect.val('==');
@@ -268,10 +291,10 @@
 	  case '<':
 	    selector = `string(properties["${propName}"]) ${operator} "${operand}"`;
 	    break;
-	  case 'in':
+	  case 'contains':
 	    selector = `"${operand}" in string(properties["${propName}"])`;
 	    break;
-	  case 'not in':
+	  case 'does not contain':
 	    selector = `not "${operand}" in string(properties["${propName}"])`;
 	    break;
 	  case 'set':
@@ -294,17 +317,19 @@
             causePropName  = causePropSelect.MPPropertySelect('value'),
 	    causeOperator = causeOperatorSelect.MPSelect('value'),
 	    causeOperand = (typeof causeOperandSelect === 'string' ? '' : causeOperandSelect.MPSelect('value')),
+	    causeOperandText = $('#causeOperandTextBox').val(),
 	    effectEventName = effectEventSelect.MPEventSelect('value'),
             effectPropName  = effectPropSelect.MPPropertySelect('value'),
 	    effectOperator = effectOperatorSelect.MPSelect('value'),
 	    effectOperand = (typeof effectOperandSelect === 'string' ? '' : effectOperandSelect.MPSelect('value')),
-            dateRange = dateSelect.MPDatepicker('value');
+	    effectOperandText = $('#effectOperandTextBox').val(),
+	    dateRange = dateSelect.MPDatepicker('value');
 
 	console.log("causePropName:", typeof causePropName, causePropName);
 	console.log("causeOperator:", typeof causeOperator, causeOperator);
 	console.log("causeOperand:", typeof causeOperand, causeOperand);
-	var causeSelector = formatSelector(causePropName, causeOperator, causeOperand);
-	var effectSelector = formatSelector(effectPropName, effectOperator, effectOperand);
+	var causeSelector = formatSelector(causePropName, causeOperator, (['contains', 'does not contain'].indexOf(causeOperator) ? causeOperandText : causeOperand));
+	var effectSelector = formatSelector(effectPropName, effectOperator, (['contains', 'does not contain'].indexOf(effectOperator) ? effectOperandText : effectOperand));
 	var params = {
 	  from_date: dateRange.from.toISOString().slice(0,10),
 	  to_date: dateRange.to.toISOString().slice(0,10),
@@ -360,6 +385,7 @@
 	$("#causeOperandSelect").empty();
 	var eventName = causeEventSelect.MPEventSelect('value');
 	var propName = causePropSelect.MPPropertySelect('value');
+	var op = causeOperatorSelect.MPSelect('value');
 	MP.api.propertyValues(eventName, propName, {limit: 255}).done(function(properties) {
 	  //console.log(properties.values());
 	  var props = _.map(properties.values(), function(item, key) {return {label: item, value: item};});
@@ -367,6 +393,18 @@
 	  $("#causeOperandSelect").append(causeOperandSelect);
 	  $("#causeOperandSelect").show();
 	});
+      });
+      causeOperatorSelect.on('change', function(e, op) {
+	if (['==','!=','>','<',].indexOf(op) > -1) {
+	  $("#causeOperandTextBox").hide();
+	  $("#causeOperandSelect").show();
+	} else if (['contains', 'does not contain'].indexOf(op) > -1) {
+	  $("#causeOperandSelect").hide();
+	  $("#causeOperandTextBox").show();
+	} else if (['set','not set'].indexOf(op) > -1) {
+	  $("#causeOperandTextBox").hide();
+	  $("#causeOperandSelect").hide();
+	}
       });
 
       // effect selection
@@ -391,6 +429,18 @@
 	  $("#effectOperandSelect").append(effectOperandSelect);
 	  $("#effectOperandSelect").show();
 	});
+     });
+      effectOperatorSelect.on('change', function(e, op) {
+	if (['==','!=','>','<',].indexOf(op) > -1) {
+	  $("#effectOperandTextBox").hide();
+	  $("#effectOperandSelect").show();
+	} else if (['contains', 'does not contain'].indexOf(op) > -1) {
+	  $("#effectOperandSelect").hide();
+	  $("#effectOperandTextBox").show();
+	} else if (['set','not set'].indexOf(op) > -1) {
+	  $("#effectOperandTextBox").hide();
+	  $("#effectOperandSelect").hide();
+	}
       });
 
       $('#runQuery').on('click', runQuery);
