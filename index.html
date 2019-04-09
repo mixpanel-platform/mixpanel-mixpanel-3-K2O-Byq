@@ -33,6 +33,11 @@
       input.operandText {
 	  height: 20px;
       }
+      #runQueryError {
+	  color: red;
+	  font-weight: bold;
+	  padding: 5px;
+      }
     </style>
   </head>
   <body class="mixpanel-platform-body">
@@ -62,6 +67,7 @@
       <div id="dateSelect" style="float: left;"></div>
       <div style="clear: both; padding: 10px;"></div>
       <button id="runQuery" class="mixpanel-platform-label" style="width: 100px;">Run Query</button>
+      <div id="runQueryError" style="float: left; margin-left: 10px; display: none;">Please choose 2 events!</div>
       <div style="clear: both; padding:10px;"></div>
       <div id="activityLevel"></div>
       <div style="clear: both;"></div>
@@ -311,6 +317,7 @@
       };
 
       var runQuery = function() {
+	$('#runQueryError').hide();
 	$('#activityLevel').empty();
 	$('#relativeScale').empty();
 	$('#absoluteScale').empty();
@@ -369,6 +376,8 @@
 	    $('#absoluteScale').append(results.toString());
 	  });
 	});
+      } else {
+	$('#runQueryError').show();
       }
       };
 
