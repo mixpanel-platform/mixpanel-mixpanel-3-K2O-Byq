@@ -30,6 +30,9 @@
         outline: 0;
         border-color: #5ba7e1;
       }
+      input.operandText {
+	  height: 20px;
+      }
     </style>
   </head>
   <body class="mixpanel-platform-body">
@@ -43,7 +46,7 @@
       <div id="causePropSelect" style="float: left; margin-left: 10px"></div>
       <div id="causeOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div id="causeOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
-      <input id="causeOperandTextBox" style="float: left; margin-left: 10px; display: none;">
+      <input id="causeOperandTextBox" class="operandText" style="float: left; margin-left: 10px; display: none;">
       <div style="clear: both; padding: 10px;"></div>
       <h1>impact my KPI (effect)</h1>
       <div id="effectEventSelect" style="float: left;"></div>
@@ -53,7 +56,7 @@
       <div id="effectPropSelect" style="float: left; margin-left: 10px;"></div>
       <div id="effectOperatorSelect" style="float: left; margin-left: 10px; display: none;"></div>
       <div id="effectOperandSelect" style="float: left; margin-left: 10px; display: none;"></div>
-      <input id="effectOperandTextBox" style="float: left; margin-left: 10px; display: none;">
+      <input id="effectOperandTextBox" class="operandText" style="float: left; margin-left: 10px; display: none;">
       <div style="clear: both; padding: 10px;"></div>
       <h1>in this date range (launch event must be introduced within this range)?</h1>
       <div id="dateSelect" style="float: left;"></div>
