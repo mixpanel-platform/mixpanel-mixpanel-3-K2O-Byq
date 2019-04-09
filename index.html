@@ -330,8 +330,8 @@
 	console.log("causePropName:", typeof causePropName, causePropName);
 	console.log("causeOperator:", typeof causeOperator, causeOperator);
 	console.log("causeOperand:", typeof causeOperand, causeOperand);
-	var causeSelector = formatSelector(causePropName, causeOperator, (['contains', 'does not contain'].indexOf(causeOperator) ? causeOperandText : causeOperand));
-	var effectSelector = formatSelector(effectPropName, effectOperator, (['contains', 'does not contain'].indexOf(effectOperator) ? effectOperandText : effectOperand));
+	var causeSelector = formatSelector(causePropName, causeOperator, (['<','>','contains', 'does not contain'].indexOf(causeOperator) ? causeOperandText : causeOperand));
+	var effectSelector = formatSelector(effectPropName, effectOperator, (['<','>','contains', 'does not contain'].indexOf(effectOperator) ? effectOperandText : effectOperand));
 	var params = {
 	  from_date: dateRange.from.toISOString().slice(0,10),
 	  to_date: dateRange.to.toISOString().slice(0,10),
@@ -397,10 +397,10 @@
 	});
       });
       causeOperatorSelect.on('change', function(e, op) {
-	if (['==','!=','>','<',].indexOf(op) > -1) {
+	if (['==','!='].indexOf(op) > -1) {
 	  $("#causeOperandTextBox").hide();
 	  $("#causeOperandSelect").show();
-	} else if (['contains', 'does not contain'].indexOf(op) > -1) {
+	} else if (['>', '<','contains', 'does not contain'].indexOf(op) > -1) {
 	  $("#causeOperandSelect").hide();
 	  $("#causeOperandTextBox").show();
 	} else if (['set','not set'].indexOf(op) > -1) {
@@ -433,10 +433,10 @@
 	});
      });
       effectOperatorSelect.on('change', function(e, op) {
-	if (['==','!=','>','<',].indexOf(op) > -1) {
+	if (['==','!='].indexOf(op) > -1) {
 	  $("#effectOperandTextBox").hide();
 	  $("#effectOperandSelect").show();
-	} else if (['contains', 'does not contain'].indexOf(op) > -1) {
+	} else if (['>','<','contains', 'does not contain'].indexOf(op) > -1) {
 	  $("#effectOperandSelect").hide();
 	  $("#effectOperandTextBox").show();
 	} else if (['set','not set'].indexOf(op) > -1) {
