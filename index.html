@@ -84,7 +84,7 @@
       // 1. why don't all the events show up in the dropdown e.g. [Flows] Change flow direction
 
 
-
+      // https://mixpanel.com/report/3/jql-console#new
       var activityLevelJQL =`
 function main() {
   return Events({
@@ -98,6 +98,7 @@ function main() {
     .reduce(mixpanel.reducer.numeric_percentiles("value", params.activity_percentiles || [25, 75, 90, 95, 99]))
   ;}
 `;
+      // https://mixpanel.com/report/3/jql-console#edit/5645877
       var relativeScaleJQL =`
 var PROJECT_TIME_OFFSET = 7 * 60 * 60 * 1000;
 
@@ -229,6 +230,7 @@ function main() {
   ;}
 `;
 
+      // https://mixpanel.com/report/3/jql-console#edit/5751773
       var cumulativeAdoptersJQL =`
 function timestampToDaysSinceEpoch(ts) {
 	return Math.floor(ts / (1000 * 3600 * 24));
@@ -295,6 +297,7 @@ function main() {
 ;}
 `;
 
+      // https://mixpanel.com/report/3/jql-console#edit/5746545
       var absoluteScaleJQL = `
 function timestampToDaysSinceEpoch(ts) {
   return Math.floor(ts / (1000 * 3600 * 24));
