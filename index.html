@@ -85,181 +85,304 @@
 
 
 
-      var activityLevelJQL = `
-	  function main() {
-	    return Events({
-	      from_date: params.from_date,
-	      to_date: params.to_date,
-	      event_selectors: [
-		...params.effect_selectors
-	      ]
-	    })
-	      .groupByUser(mixpanel.reducer.count())
-	      .reduce(mixpanel.reducer.numeric_percentiles("value", params.activity_percentiles || [25, 75, 90, 95, 99]))
-	  };
+      var activityLevelJQL =`
+function main() {
+  return Events({
+    from_date: params.from_date,
+    to_date: params.to_date,
+    event_selectors: [
+      ...params.effect_selectors
+    ]
+  })
+    .groupByUser(mixpanel.reducer.count())
+    .reduce(mixpanel.reducer.numeric_percentiles("value", params.activity_percentiles || [25, 75, 90, 95, 99]))
+  ;}
 `;
-      var relativeScaleJQL =
-	  `
-  var PROJECT_TIME_OFFSET = 7 * 60 * 60 * 1000;
+      var relativeScaleJQL =`
+var PROJECT_TIME_OFFSET = 7 * 60 * 60 * 1000;
 
-      function timestampToDaysSinceEpoch(ts) {
-	return Math.floor(ts / (1000 * 3600 * 24));
+function timestampToDaysSinceEpoch(ts) {
+  return Math.floor(ts / (1000 * 3600 * 24));
+}
+
+function dateToDaysSinceEpoch(date) {
+  return timestampToDaysSinceEpoch(date.getTime());
+}
+
+function emptyTimeseries(length) {
+  return (new Array(length)).fill(0);
+}
+
+var from = dateToDaysSinceEpoch(new Date(Date.parse(params.from_date)));
+var to = dateToDaysSinceEpoch(new Date(Date.parse(params.to_date)));
+var timeseriesLength = (to - from + 1);
+
+var subquery = Events({
+  from_date: params.from_date,
+  to_date: params.to_date,
+  event_selectors: params.effect_selectors
+}).groupByUser(mixpanel.reducer.count());
+
+function main() {
+  return join(Events({
+    from_date: params.from_date,
+    to_date:   params.to_date,
+    event_selectors: [
+      ...params.effect_selectors,
+      ...params.cause_selectors
+    ]
+  }), subquery, {behavior_name: "activity_level", type: "left", selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]})
+  // For each user, return an object {treatmentTime: int, effectCounts: int[]}
+  // treatmentTime is the timestamp of the first time the user did the treatment or null if they never did.
+  // effectCounts is a list of counts of the effect event for each day after the treatment event was performed.
+  // /*
+    .groupByUser((state, events) => {
+      state = state || {treatmentTime: null, effectCounts: emptyTimeseries(timeseriesLength), firstEffectTime: null};
+      for(var i = 0; i< events.length; i++) {
+	if (events[i].behaviors && events[i].behaviors.activity_level) {
+	  state.activity_level = events[i].behaviors.activity_level;
+	}
+	var event = events[i].event;
+	if (event.labels && event.labels.includes("$cause") && state.treatmentTime === null) {
+	  state.treatmentTime = event.time + PROJECT_TIME_OFFSET;
+	}
+	if (event.labels && event.labels.includes("$effect")) {
+	  var index = timestampToDaysSinceEpoch(event.time + PROJECT_TIME_OFFSET) - from;
+	  state.effectCounts[index] += 1;
+	  if (index >= params.window && index < state.effectCounts.length - params.window && state.firstEffectTime === null) {
+	    state.firstEffectTime = event.time + PROJECT_TIME_OFFSET;
+	  }
+	}
       }
+      return state;
+    })
+    .groupBy([mixpanel.numeric_bucket("value.activity_level", params.activity_level_bounds)],
+	     function(countAccumulators, countObjects) {
+	       // accume holds the number of treatment users, and a time series with the average events per day for some period
+	       // before and after the treatment event is first performed.
+	       var accume = {
+		 treatment: {
+		   userCount: 0,
+		   effectTimeseries: emptyTimeseries(2 * params.window + 1)
+		 },
+		 control: {
+		   userCount: 0,
+		   effectTimeseries: emptyTimeseries(2 * params.window + 1)
+		 }
+	       };
 
-      function dateToDaysSinceEpoch(date) {
-	return timestampToDaysSinceEpoch(date.getTime());
-      }
-
-      function emptyTimeseries(length) {
-	return (new Array(length)).fill(0);
-      }
-
-      var from = dateToDaysSinceEpoch(new Date(Date.parse(params.from_date)));
-      var to = dateToDaysSinceEpoch(new Date(Date.parse(params.to_date)));
-      var timeseriesLength = (to - from + 1);
-
-      var subquery = Events({
-	from_date: params.from_date,
-	to_date: params.to_date,
-	event_selectors: params.effect_selectors
-      }).groupByUser(mixpanel.reducer.count());
-
-      function main() {
-	return join(Events({
-	  from_date: params.from_date,
-	  to_date:   params.to_date,
-	  event_selectors: [
-	    ...params.effect_selectors,
-	    ...params.cause_selectors
-	  ]
-	}), subquery, {behavior_name: "activity_level", type: "left", selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]})
-	// For each user, return an object {treatmentTime: int, effectCounts: int[]}
-	// treatmentTime is the timestamp of the first time the user did the treatment or null if they never did.
-	// effectCounts is a list of counts of the effect event for each day after the treatment event was performed.
-	// /*
-	  .groupByUser((state, events) => {
-	    state = state || {treatmentTime: null, effectCounts: emptyTimeseries(timeseriesLength), firstEffectTime: null};
-	    for(var i = 0; i< events.length; i++) {
-	      if (events[i].behaviors && events[i].behaviors.activity_level) {
-		state.activity_level = events[i].behaviors.activity_level;
-	      }
-	      var event = events[i].event;
-	      if (event.labels && event.labels.includes("$treatment") && state.treatmentTime === null) {
-		state.treatmentTime = event.time + PROJECT_TIME_OFFSET;
-	      }
-	      if (event.labels && event.labels.includes("$effect")) {
-		var index = timestampToDaysSinceEpoch(event.time + PROJECT_TIME_OFFSET) - from;
-		state.effectCounts[index] += 1;
-		if (index >= params.window && index < state.effectCounts.length - params.window && state.firstEffectTime === null) {
-		  state.firstEffectTime = event.time + PROJECT_TIME_OFFSET;
-		}
-	      }
-	    }
-	    return state;
-	  })
-	// */ // .filter((u) => u.value.treatmentTime !== null)
-	// .reduce(mixpanel.reducer.count())
-	  .groupBy([mixpanel.numeric_bucket("value.activity_level", params.activity_level_bounds)],
-
-		   //.reduce(
-		   function(countAccumulators, countObjects) {
-		     // accume holds the number of treatment users, and a time series with the average events per day for some period
-		     // before and after the treatment event is first performed.
-		     var accume = {
-		       treatment: {
-			 userCount: 0,
-			 effectTimeseries: emptyTimeseries(2 * params.window + 1)
-		       },
-		       control: {
-			 userCount: 0,
-			 effectTimeseries: emptyTimeseries(2 * params.window + 1)
-		       }
-		     };
-
-		     // Add all the accumulators
-		     for(var i = 0; i < countAccumulators.length; i++) {
-		       currentAccume = countAccumulators[i];
-		       accume.treatment.userCount += currentAccume.treatment.userCount;
-		       accume.control.userCount += currentAccume.control.userCount;
-		       for(var j = 0; j < currentAccume.treatment.effectTimeseries.length; j++) {
-			 if (currentAccume.treatment.effectTimeseries[j]) {
-			   accume.treatment.effectTimeseries[j] += (currentAccume.treatment.effectTimeseries[j] *
-								    currentAccume.treatment.userCount);
-			 }
-			 if (currentAccume.control.effectTimeseries[j]) {
-			   accume.control.effectTimeseries[j] += (currentAccume.control.effectTimeseries[j] *
-								  currentAccume.control.userCount);
-			 }
-		       }
-		     }
-
-		     // Add all the individual counts
-		     for(i = 0; i < countObjects.length; i++) {
-		       var currentCount = countObjects[i].value;
-		       if (!currentCount.treatmentTime) { // temporarily only look at people who've had the treatment
-			 // This group never did the treatment event
-			 var index = timestampToDaysSinceEpoch(currentCount.firstEffectTime) - from;
-			 if (index >= params.window && index < currentCount.effectCounts.length - params.window) {
-			   accume.control.userCount += 1;
-			   for(var j = index - params.window; j < index + params.window; j++) {
-			     accume.control.effectTimeseries[j - (index - params.window)] += currentCount.effectCounts[j];
-			   }
-			 }
-		       } else {
-			 // This group did the treatment event
-			 var index = timestampToDaysSinceEpoch(currentCount.treatmentTime) - from;
-			 if (index >= params.window && index < currentCount.effectCounts.length - params.window) {
-			   accume.treatment.userCount += 1;
-			   for(var j = index - params.window; j < index + params.window; j++) {
-			     accume.treatment.effectTimeseries[j - (index - params.window)] += currentCount.effectCounts[j];
-			   }
-			 }
-		       }
-		     }
-		     // Normalize to get the average effectEvents per day
-		     for (var relativeDay = 0; relativeDay < accume.treatment.effectTimeseries.length; relativeDay++) {
-		       if (accume.treatment.userCount && accume.treatment.effectTimeseries[relativeDay]) {
-			 accume.treatment.effectTimeseries[relativeDay] = (1.0 * accume.treatment.effectTimeseries[relativeDay]) / accume.treatment.userCount;
-		       }
-		       if (accume.control.userCount && accume.control.effectTimeseries[relativeDay]) {
-			 accume.control.effectTimeseries[relativeDay] = (1.0 * accume.control.effectTimeseries[relativeDay]) / accume.control.userCount;
-		       }
-		     }
-		     return accume;
+	       // Add all the accumulators
+	       for(var i = 0; i < countAccumulators.length; i++) {
+		 currentAccume = countAccumulators[i];
+		 accume.treatment.userCount += currentAccume.treatment.userCount;
+		 accume.control.userCount += currentAccume.control.userCount;
+		 for(var j = 0; j < currentAccume.treatment.effectTimeseries.length; j++) {
+		   if (currentAccume.treatment.effectTimeseries[j]) {
+		     accume.treatment.effectTimeseries[j] += (currentAccume.treatment.effectTimeseries[j] *
+							      currentAccume.treatment.userCount);
 		   }
-		  )
+		   if (currentAccume.control.effectTimeseries[j]) {
+		     accume.control.effectTimeseries[j] += (currentAccume.control.effectTimeseries[j] *
+							    currentAccume.control.userCount);
+		   }
+		 }
+	       }
+
+	       // Add all the individual counts
+	       for(i = 0; i < countObjects.length; i++) {
+		 var currentCount = countObjects[i].value;
+		 if (!currentCount.treatmentTime) { // temporarily only look at people who've had the treatment
+		   // This group never did the treatment event
+		   var index = timestampToDaysSinceEpoch(currentCount.firstEffectTime) - from;
+		   if (index >= params.window && index < currentCount.effectCounts.length - params.window) {
+		     accume.control.userCount += 1;
+		     for(var j = index - params.window; j < index + params.window; j++) {
+		       accume.control.effectTimeseries[j - (index - params.window)] += currentCount.effectCounts[j];
+		     }
+		   }
+		 } else {
+		   // This group did the treatment event
+		   var index = timestampToDaysSinceEpoch(currentCount.treatmentTime) - from;
+		   if (index >= params.window && index < currentCount.effectCounts.length - params.window) {
+		     accume.treatment.userCount += 1;
+		     for(var j = index - params.window; j < index + params.window; j++) {
+		       accume.treatment.effectTimeseries[j - (index - params.window)] += currentCount.effectCounts[j];
+		     }
+		   }
+		 }
+	       }
+	       // Normalize to get the average effectEvents per day
+	       for (var relativeDay = 0; relativeDay < accume.treatment.effectTimeseries.length; relativeDay++) {
+		 if (accume.treatment.userCount && accume.treatment.effectTimeseries[relativeDay]) {
+		   accume.treatment.effectTimeseries[relativeDay] = (1.0 * accume.treatment.effectTimeseries[relativeDay]) / accume.treatment.userCount;
+		 }
+		 if (accume.control.userCount && accume.control.effectTimeseries[relativeDay]) {
+		   accume.control.effectTimeseries[relativeDay] = (1.0 * accume.control.effectTimeseries[relativeDay]) / accume.control.userCount;
+		 }
+	       }
+	       return accume;
+	     }
+	    )
     .filter(function(item) {
       return item.value.control.userCount > 0 && item.value.treatment.userCount > 0;
-    });
+    })
+  ;}
+`;
+
+      var cumulativeAdoptersJQL =`
+function timestampToDaysSinceEpoch(ts) {
+	return Math.floor(ts / (1000 * 3600 * 24));
 }
+
+function dateToDaysSinceEpoch(date) {
+	return timestampToDaysSinceEpoch(date.getTime());
+}
+
+function emptyTimeseries(length) {
+	var ar = new Array(length);
+	for(var i = 0; i < ar.length; i++) {
+	  ar[i] =  {adopters: [], non_adopters: []}; //[];
+	}
+	return ar
+}
+
+var from = dateToDaysSinceEpoch(new Date(Date.parse(params.from_date)));
+var to = dateToDaysSinceEpoch(new Date(Date.parse(params.to_date)));
+var timeseriesLength = (to - from + 1);
+
+function main() {
+  return join(
+    Events({
+    from_date: params.from_date,
+    to_date: params.to_date,
+    event_selectors: [...params.cause_selectors, ...params.effect_selectors],
+  }), People(), {type: "inner", selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]})
+  .reduce(function(accumulators, items) {
+    var accum = emptyTimeseries(timeseriesLength);
+    for (var i = 0; i < accum.length; i++) {
+      for (var j = 0; j < accumulators.length; j++) {
+        accum[i].adopters.push(...(accumulators[j][i].adopters));
+        accum[i].non_adopters.push(...(accumulators[j][i].non_adopters));
+      }
+    }
+    var all_users = [];
+    for (var k = 0; k < items.length; k++) {
+      var ev = items[k].event;
+      var index = timestampToDaysSinceEpoch(ev.time) - from;
+      for (var l = index; l < accum.length; l++) {
+        if (ev.labels && ev.labels.includes("$cause")) {
+          accum[l].adopters.push(ev.distinct_id);
+        }
+      }
+      all_users.push(ev.distinct_id);
+    }
+    for (var m = 0; m < accum.length; m++) {
+      var xa = new Set(accum[m].adopters);
+      accum[m].adopters = Array.from(xa);
+      var xna = new Set([...(accum[m]).non_adopters, ...all_users]);
+      accum[m].non_adopters = Array.from(xna);
+    }
+    return accum;
+  })
+  .flatten()
+  .map(function(x) {
+    var a = new Set(x.adopters);
+    var na = new Set(x.non_adopters.filter(x => !a.has(x)));
+    delete x.non_adopters;
+    x.num_non_adopters = Array.from(na).length;
+    return x;
+  })
+;}
 `;
 
-      var absoluteScaleJQL =`
-	  function main() {
-	    return join(
-	      Events({
-		from_date: params.from_date,
-		to_date:   params.to_date,
-		event_selectors: [
-		  ...params.effect_selectors,
-		  ...params.cause_selectors
-		]
-	      }),
-	      People(),
-	      {
-		type: "inner",
-		selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]
-	      })
-	      .map(function(t) { return t.event; })
+      var absoluteScaleJQL = `
+function timestampToDaysSinceEpoch(ts) {
+  return Math.floor(ts / (1000 * 3600 * 24));
+}
 
+function timestampToDateString(ts) {
+  return (new Date(ts)).toISOString().slice(0,10);
+}
 
-// TODO remove this once the whole thing is implemented in jql- this is just to get it to return quickly
-.groupBy(["name"], mixpanel.reducer.count());
-	  }
-`;
+function safeDiv(num, denom) {
+  if (denom === 0) {
+    return 0;
+  } else {
+    return num / denom;
+  }
+}
 
+function dateToDaysSinceEpoch(date) {
+	return timestampToDaysSinceEpoch(date.getTime());
+}
 
-      // var userCohort = ''; TODO
+var from = dateToDaysSinceEpoch(new Date(Date.parse(params.from_date)));
+var to = dateToDaysSinceEpoch(new Date(Date.parse(params.to_date)));
+
+var subquery = Events({
+  from_date: params.from_date,
+  to_date: params.to_date,
+  event_selectors: params.effect_selectors
+}).groupByUser(mixpanel.reducer.count());
+
+ function main() {
+   return join(
+     join( // add this line if excluding mixpanelers
+       Events({
+        from_date: params.from_date,
+  		  to_date:   params.to_date,
+  		  event_selectors: params.effect_selectors}),
+  		  People(), {type: "inner", selectors:[{selector: '(not "mixpanel.com" in user["$email"])'}]}), // add this line if excluding mixpanelers
+  		  subquery, {behavior_name: "activity_level", type: "left"})
+     .groupBy([mixpanel.numeric_bucket("behaviors.activity_level", params.activity_level_bounds), function(ev) {return timestampToDateString(ev.event.time);}],
+      function(accums, its) {
+        var accum = {adopter_effect_counts: 0,
+                     num_adopters: 0,
+                     non_adopter_effect_counts: 0,
+                     num_non_adopters: 0};
+        _.each(accums, function (acc) {
+          accum.adopter_effect_counts += acc.adopter_effect_counts;
+          accum.num_adopters = Math.max(accum.num_adopters, acc.num_adopters);
+          accum.non_adopter_effect_counts += acc.non_adopter_effect_counts;
+          accum.num_non_adopters = Math.max(accum.num_non_adopters, acc.num_non_adopters);
+        });
+        var index = null;
+        var adopters = [];
+        if (its.length > 0) {
+          index = timestampToDaysSinceEpoch(its[0].event.time) - from;
+          adopters = params.cumulative_adopters[index].adopters;
+          accum.num_adopters = adopters.length;
+          accum.num_non_adopters = params.cumulative_adopters[index].num_non_adopters;
+        }
+        _.each(its, function (it) {
+          var event = it.event;
+          if (adopters.includes(event.distinct_id)) {
+            accum.adopter_effect_counts += 1;
+          } else {
+            accum.non_adopter_effect_counts += 1;
+          }
+        });
+        return accum;
+      })
+      .reduce(function(accumulators, items){
+        var a = {};
+        for (var i = 0; i < accumulators.length; i++) {
+          for (var activity_level in accumulators[i]) {
+            a[activity_level] = Object.assign({}, a[activity_level] || {}, accumulators[i][activity_level]);
+          }
+        }
+        _.each(items, function (item) {
+          var avgmap = {"adopter_avg": safeDiv(item.value.adopter_effect_counts, item.value.num_adopters),
+                        "non_adopter_avg": safeDiv(item.value.non_adopter_effect_counts, item.value.num_non_adopters)}
+          a[item.key[0]] = a[item.key[0]] || {};
+          a[item.key[0]][item.key[1]] = avgmap;
+        });
+        return a;
+      })
+   ;}
+   `;
+
+      // var userCohort = ''; TODO user group
       var causeEventSelect = $('#causeEventSelect').MPEventSelect();
       var causePropSelect  = $('#causePropSelect').MPPropertySelect();
       var causeOperatorSelect = $('#causeOperatorSelect').MPSelect({items: [{label: '==', value: '=='},
@@ -343,9 +466,11 @@
 	  from_date: dateRange.from.toISOString().slice(0,10),
 	  to_date: dateRange.to.toISOString().slice(0,10),
 	  cause_selectors: [{event: causeEventName,
-			     selector: causeSelector,}],
+			     selector: causeSelector,
+			     label: '$cause'}],
 	  effect_selectors: [{event: effectEventName,
-			      selector: effectSelector,}],
+			      selector: effectSelector,
+			      label: '$effect'}],
 	  activity_percentiles: [25, 75, 90, 95, 99],
           window: 30
 	};
@@ -353,27 +478,34 @@
       if (causeEventName && effectEventName) {
 	console.log("Running activity level with params:", params);
 	// activity level
-	MP.api.jql(activityLevelJQL, params).done(function(results) {
-	  console.log("Activity level results:", results);
+	MP.api.jql(activityLevelJQL, params).done(function(alresults) {
+	  console.log("Activity level results:", alresults);
 	  $('#activityLevel').append($('<h1>').append('<br><br>Activity level: <br>'));
-	  $('#activityLevel').append(results[0].toString());
+	  $('#activityLevel').append(alresults[0].toString());
+
+	  var activity_level_bounds = [...new Set(alresults[0].map(x => x["value"]))].sort(function(a, b){return a - b});
+	  params['activity_level_bounds'] = activity_level_bounds;
 
 	  // relative scale
-	  var activity_level_bounds = [...new Set(results[0].map(x => x["value"]))].sort(function(a, b){return a - b});
-	  params['activity_level_bounds'] = activity_level_bounds;
 	  console.log("Running relative scale with params:", params);
-	  MP.api.jql(relativeScaleJQL, params).done(function(results) {
-	    console.log("Relative scale results:", results);
+	  MP.api.jql(relativeScaleJQL, params).done(function(rsresults) {
+	    console.log("Relative scale results:", rsresults);
 	    $('#relativeScale').append($('<h1>').append('<br><br>Relative scale: <br>'));
-	    $('#relativeScale').append(results.toString());
+	    $('#relativeScale').append(rsresults.toString());
 	  });
+
 
 	  // absolute scale
 	  console.log("Running absolute scale with params:", params);
-	  MP.api.jql(absoluteScaleJQL, params).done(function(results) {
-	    console.log("Absolute scale results:", results);
-	    $('#absoluteScale').append($('<h1>').append('<br><br>Absolute scale: <br>'));
-	    $('#absoluteScale').append(results.toString());
+	  MP.api.jql(cumulativeAdoptersJQL, params).done(function(curesults) {
+	    console.log("Cumulative adopters results:", curesults);
+	    params['cumulative_adopters'] = curesults;
+
+	    MP.api.jql(absoluteScaleJQL, params).done(function(asresults) {
+	      console.log("Absolute scale results:", asresults);
+	      $('#absoluteScale').append($('<h1>').append('<br><br>Absolute scale: <br>'));
+	      $('#absoluteScale').append(asresults.toString());
+	    });
 	  });
 	});
       } else {
